@@ -1,0 +1,7 @@
+Jeg bruger linear filtering sammen med mipmapping og linear mipmap filtering.
+
+Earth-texturen har høj opløsning, og når dele af kloden bevæger sig langt væk fra kameraet, bliver mange texels reduceret til få pixels. Uden mipmapping kan dette give aliasing og flimren, især når kloden bevæger sig.
+
+Mipmapping bruger mindre versioner af teksturen, når overfladen bliver mindre på skærmen. Linear filtering giver samtidig glattere sampling mellem texels. Linear mipmap filtering giver en glidende overgang mellem mipmap-niveauerne.
+
+Denne kombination reducerer minification-problemer og flimren uden at gøre Earth-texturen unødvendigt sløret.
