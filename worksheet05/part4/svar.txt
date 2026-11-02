@@ -1,0 +1,6 @@
+Normalerne bestemmer, hvordan lyset rammer overfladen. 
+Når normalerne interpoleres mellem vertices, ændrer lysberegningen sig gradvist hen over trekanterne, og overfladen ser derfor glat ud.
+Hvis hver trekant i stedet bruger sin egen face normal, får hele trekanten næsten samme lysberegning. 
+Så bliver kanterne mellem trekanterne tydelige, og modellen ser mere kantet eller facetteret ud.
+I denne opgave bruges normalerne fra OBJ-filen i Phong shading, hvor de interpoleres og normaliseres igen i fragment shaderen. 
+Det giver en glattere belysning på Suzanne.
