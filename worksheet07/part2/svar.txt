@@ -1,0 +1,12 @@
+Baggrundens quad er defineret direkte i clip space og ligger tæt på kameraets far plane.
+Derfor bruges identity matricen som dens model view projection matrix.
+
+For at bruge cube map'et skal positionerne på baggrundens quad omdannes til retninger i world space.
+Først anvendes den inverse projection matrix til at transformere fra clip space til camera space.
+Derefter anvendes den inverse rotation fra view matricen til at transformere retningen fra camera space til world space.
+
+Translationen fra view matricen anvendes ikke,
+fordi cube map-opslag afhænger af en retning og ikke af en position.
+
+For kuglen er Mtex identity,
+fordi positionerne på unit sphere allerede kan bruges som retninger til opslag i cube map'et.
