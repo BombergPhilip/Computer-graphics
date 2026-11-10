@@ -1,0 +1,370 @@
+
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worksheet 10 - Part 2</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        canvas {
+            display: block;
+            max-width: 100%;
+            margin-bottom: 12px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 8px 14px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        #status {
+            color: #a00000;
+            white-space: pre-wrap;
+        }
+    </style>
+
+    <script src="../../resources/MV.js"></script>
+    <script src="../../resources/OBJParser.js"></script>
+
+    <script id="ground-wgsl" type="x-shader">
+        struct Uniforms {
+            mvp: mat4x4f,
+            showDepth: vec4f,
+            lightVP: mat4x4f,
+        };
+
+        @group(0) @binding(0)
+        var<uniform> uniforms: Uniforms;
+
+        @group(0) @binding(1)
+        var marble: texture_2d<f32>;
+
+        @group(0) @binding(2)
+        var marbleSampler: sampler;
+
+        @group(0) @binding(3)
+        var lightDepthMap: texture_2d<f32>;
+
+        struct VSOut {
+            @builtin(position) position: vec4f,
+            @location(0) uv: vec2f,
+            @location(1) worldPosition: vec3f,
+        };
+
+        @vertex
+        fn main_vs(
+            @location(0) position: vec3f,
+            @location(1) uv: vec2f
+        ) -> VSOut {
+            var output: VSOut;
+
+            output.position =
+                uniforms.mvp * vec4f(position, 1.0);
+
+            output.uv = uv;
+            output.worldPosition = position;
+
+            return output;
+        }
+
+        // 5x5 PCF til bløde skygger på gulvet
+        fn shadowVisibility(worldPosition: vec3f) -> f32 {
+            let clip = uniforms.lightVP *
+                vec4f(worldPosition, 1.0);
+
+            if (clip.w <= 0.0) {
+                return 1.0;
+            }
+
+            let ndc = clip.xyz / clip.w;
+
+            let uv = vec2f(
+                ndc.x * 0.5 + 0.5,
+                0.5 - ndc.y * 0.5
+            );
+
+            if (uv.x < 0.0 || uv.x >= 1.0 ||
+                uv.y < 0.0 || uv.y >= 1.0 ||
+                ndc.z < 0.0 || ndc.z > 1.0) {
+                return 1.0;
+            }
+
+            let dimensions = vec2i(
+                textureDimensions(lightDepthMap)
+            );
+
+            let center = vec2i(
+                uv * vec2f(dimensions)
+            );
+
+            let bias = 0.004;
+            let spread = 4;
+
+            var litSamples = 0.0;
+
+            for (var y: i32 = -2; y <= 2; y = y + 1) {
+                for (var x: i32 = -2; x <= 2; x = x + 1) {
+                    let samplePixel = clamp(
+                        center + vec2i(x, y) * spread,
+                        vec2i(0),
+                        dimensions - vec2i(1)
+                    );
+
+                    let storedDepth = textureLoad(
+                        lightDepthMap,
+                        samplePixel,
+                        0
+                    ).r;
+
+                    if (ndc.z <= storedDepth + bias) {
+                        litSamples += 1.0;
+                    }
+                }
+            }
+
+            let visibility = litSamples / 25.0;
+            return 0.45 + 0.55 * visibility;
+        }
+
+        @fragment
+        fn main_fs(
+            @location(0) uv: vec2f,
+            @location(1) worldPosition: vec3f
+        ) -> @location(0) vec4f {
+            let marbleColor = textureSample(
+                marble,
+                marbleSampler,
+                uv
+            );
+
+            if (uniforms.showDepth.x > 0.5) {
+                let dimensions = textureDimensions(
+                    lightDepthMap
+                );
+
+                let texel = vec2i(
+                    clamp(
+                        uv,
+                        vec2f(0.0),
+                        vec2f(0.99999)
+                    ) * vec2f(dimensions)
+                );
+
+                let depth = textureLoad(
+                    lightDepthMap,
+                    texel,
+                    0
+                ).r;
+
+                let gray = clamp(
+                    (1.0 - depth) * 12.0,
+                    0.0,
+                    1.0
+                );
+
+                return vec4f(vec3f(gray), 1.0);
+            }
+
+            let visibility = shadowVisibility(worldPosition);
+
+            return vec4f(
+                marbleColor.rgb * visibility,
+                marbleColor.a
+            );
+        }
+    </script>
+
+    <script id="teapot-wgsl" type="x-shader">
+        struct Uniforms {
+            mvp: mat4x4f,
+            model: mat4x4f,
+            lightPosition: vec4f,
+            lightVP: mat4x4f,
+            cameraPosition: vec4f,
+        };
+
+        @group(0) @binding(0)
+        var<uniform> uniforms: Uniforms;
+
+        @group(0) @binding(1)
+        var lightDepthMap: texture_2d<f32>;
+
+        struct VSOut {
+            @builtin(position) position: vec4f,
+            @location(0) worldPosition: vec3f,
+            @location(1) normal: vec3f,
+        };
+
+        @vertex
+        fn main_vs(
+            @location(0) position: vec4f,
+            @location(1) normal: vec4f
+        ) -> VSOut {
+            var output: VSOut;
+
+            let world = uniforms.model * position;
+
+            output.position = uniforms.mvp * position;
+            output.worldPosition = world.xyz;
+
+            output.normal = normalize(
+                (uniforms.model *
+                 vec4f(normal.xyz, 0.0)).xyz
+            );
+
+            return output;
+        }
+
+        fn shadowVisibility(worldPosition: vec3f) -> f32 {
+            let clip = uniforms.lightVP *
+                vec4f(worldPosition, 1.0);
+
+            if (clip.w <= 0.0) {
+                return 1.0;
+            }
+
+            let ndc = clip.xyz / clip.w;
+
+            let uv = vec2f(
+                ndc.x * 0.5 + 0.5,
+                0.5 - ndc.y * 0.5
+            );
+
+            if (uv.x < 0.0 || uv.x >= 1.0 ||
+                uv.y < 0.0 || uv.y >= 1.0 ||
+                ndc.z < 0.0 || ndc.z > 1.0) {
+                return 1.0;
+            }
+
+            let dimensions = vec2i(
+                textureDimensions(lightDepthMap)
+            );
+
+            let pixel = clamp(
+                vec2i(uv * vec2f(dimensions)),
+                vec2i(0),
+                dimensions - vec2i(1)
+            );
+
+            let storedDepth = textureLoad(
+                lightDepthMap,
+                pixel,
+                0
+            ).r;
+
+            let bias = 0.004;
+
+            if (ndc.z > storedDepth + bias) {
+                return 0.45;
+            }
+
+            return 1.0;
+        }
+
+        @fragment
+        fn main_fs(input: VSOut) -> @location(0) vec4f {
+            let N = normalize(input.normal);
+
+            let L = normalize(
+                uniforms.lightPosition.xyz -
+                input.worldPosition
+            );
+
+            let V = normalize(
+                uniforms.cameraPosition.xyz -
+                input.worldPosition
+            );
+
+            let H = normalize(L + V);
+
+            let diffuse = max(dot(N, L), 0.0);
+            let specular = pow(
+                max(dot(N, H), 0.0),
+                32.0
+            );
+
+            let visibility = shadowVisibility(
+                input.worldPosition
+            );
+
+            let materialColor = vec3f(0.56, 0.58, 0.62);
+            let ambient = 0.40;
+
+            let rgb =
+                materialColor *
+                (ambient + 0.70 * diffuse * visibility)
+                + vec3f(0.30, 0.30, 0.30)
+                * specular * visibility;
+
+            return vec4f(rgb, 1.0);
+        }
+    </script>
+
+    <script id="light-wgsl" type="x-shader">
+        struct LightUniforms {
+            lightMVP: mat4x4f,
+        };
+
+        @group(0) @binding(0)
+        var<uniform> uniforms: LightUniforms;
+
+        @vertex
+        fn ground_vs(
+            @location(0) position: vec3f
+        ) -> @builtin(position) vec4f {
+            return uniforms.lightMVP *
+                vec4f(position, 1.0);
+        }
+
+        @vertex
+        fn teapot_vs(
+            @location(0) position: vec4f
+        ) -> @builtin(position) vec4f {
+            return uniforms.lightMVP * position;
+        }
+
+        @fragment
+        fn depth_fs(
+            @builtin(position) pixel: vec4f
+        ) -> @location(0) vec4f {
+            return vec4f(
+                pixel.z,
+                pixel.z,
+                pixel.z,
+                1.0
+            );
+        }
+    </script>
+
+    <script src="myscript.js"></script>
+</head>
+
+<body>
+    <h2>Worksheet 10 - Part 2</h2>
+
+    <canvas id="my-canvas" width="512" height="512">
+        Please use a browser that supports HTML5 canvas.
+    </canvas>
+
+    <div class="controls">
+        <button id="toggleTeapot">Pause teapot</button>
+        <button id="toggleLight">Pause lys</button>
+        <button id="toggleShadowMap">Vis shadow map</button>
+    </div>
+
+    <p id="status" role="alert"></p>
+</body>
+</html>

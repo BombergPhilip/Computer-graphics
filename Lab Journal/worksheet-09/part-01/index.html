@@ -1,0 +1,132 @@
+
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Worksheet 9 - Part 1</title>
+
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script type="text/javascript" src="../../resources/OBJParser.js"></script>
+
+    <script id="ground-wgsl" type="x-shader">
+        struct Uniforms {
+            mvp: mat4x4f,
+        };
+
+        @group(0) @binding(0)
+        var<uniform> uniforms: Uniforms;
+
+        @group(0) @binding(1)
+        var marble: texture_2d<f32>;
+
+        @group(0) @binding(2)
+        var marbleSampler: sampler;
+
+        struct VSOut {
+            @builtin(position) position: vec4f,
+            @location(0) uv: vec2f,
+        };
+
+        @vertex
+        fn main_vs(
+            @location(0) position: vec3f,
+            @location(1) uv: vec2f
+        ) -> VSOut {
+            var output: VSOut;
+
+            output.position =
+                uniforms.mvp * vec4f(position, 1.0);
+
+            output.uv = uv;
+
+            return output;
+        }
+
+        @fragment
+        fn main_fs(
+            @location(0) uv: vec2f
+        ) -> @location(0) vec4f {
+            return textureSample(
+                marble,
+                marbleSampler,
+                uv
+            );
+        }
+    </script>
+
+    <script id="teapot-wgsl" type="x-shader">
+        struct Uniforms {
+            mvp: mat4x4f,
+            model: mat4x4f,
+            lightPosition: vec4f,
+        };
+
+        @group(0) @binding(0)
+        var<uniform> uniforms: Uniforms;
+
+        struct VSOut {
+            @builtin(position) position: vec4f,
+            @location(0) worldPosition: vec3f,
+            @location(1) normal: vec3f,
+        };
+
+        @vertex
+        fn main_vs(
+            @location(0) position: vec4f,
+            @location(1) normal: vec4f
+        ) -> VSOut {
+            var output: VSOut;
+
+            let world = uniforms.model * position;
+
+            output.position = uniforms.mvp * position;
+            output.worldPosition = world.xyz;
+
+            output.normal = normalize(
+                (uniforms.model * vec4f(normal.xyz, 0.0)).xyz
+            );
+
+            return output;
+        }
+
+        @fragment
+        fn main_fs(
+            input: VSOut
+        ) -> @location(0) vec4f {
+            let N = normalize(input.normal);
+            let L = normalize(
+                uniforms.lightPosition.xyz - input.worldPosition
+            );
+            let V = normalize(-input.worldPosition);
+            let H = normalize(L + V);
+
+            let diffuse = max(dot(N, L), 0.0);
+            let specular = pow(max(dot(N, H), 0.0), 32.0);
+
+            let materialColor = vec3f(0.56, 0.58, 0.62);
+            let ambient = 0.22;
+
+            let rgb =
+                materialColor * (ambient + 0.70 * diffuse)
+                + vec3f(0.30, 0.30, 0.30) * specular;
+
+            return vec4f(rgb, 1.0);
+        }
+    </script>
+
+    <script type="text/javascript" src="myscript.js"></script>
+</head>
+
+<body>
+    <canvas id="my-canvas" width="512" height="512">
+        Please use a browser that supports HTML5 canvas.
+    </canvas>
+
+    <div>
+        <button id="toggleTeapot" type="button">Pause teapot</button>
+        <button id="toggleLight" type="button">Pause lys</button>
+    </div>
+
+    <p id="status" role="alert"></p>
+</body>
+</html>

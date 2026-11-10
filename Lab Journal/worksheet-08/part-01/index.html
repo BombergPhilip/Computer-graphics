@@ -1,0 +1,60 @@
+
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Worksheet 8 - Part 1</title>
+
+    <script id="wgsl" type="x-shader">
+        struct Uniforms {
+            projection: mat4x4f,
+        };
+
+        @group(0) @binding(0)
+        var<uniform> uniforms: Uniforms;
+
+        @group(0) @binding(1)
+        var textureMap: texture_2d<f32>;
+
+        @group(0) @binding(2)
+        var textureSampler: sampler;
+
+        struct VSOut {
+            @builtin(position) position: vec4f,
+            @location(0) texCoord: vec2f,
+        };
+
+        @vertex
+        fn main_vs(
+            @location(0) position: vec3f,
+            @location(1) texCoord: vec2f
+        ) -> VSOut {
+            var output: VSOut;
+
+            output.position =
+                uniforms.projection * vec4f(position, 1.0);
+
+            output.texCoord = texCoord;
+
+            return output;
+        }
+
+        @fragment
+        fn main_fs(
+            @location(0) texCoord: vec2f
+        ) -> @location(0) vec4f {
+            return textureSample(
+                textureMap,
+                textureSampler,
+                texCoord
+            );
+        }
+    </script>
+
+<script type="text/javascript" src="../../resources/MV.js"></script>
+<script type="text/javascript" src="myscript.js"></script>
+</head>
+<canvas id="my-canvas" width="512" height="512">
+    Please use a browser that supports HTML5 canvas.
+</canvas>
+</html>
