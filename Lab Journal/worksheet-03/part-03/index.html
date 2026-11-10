@@ -1,0 +1,112 @@
+<!doctype html>
+  <head>
+    <title>Worksheet 3 - Part 3</title>
+  </head>
+
+  <body>
+    <h1>Worksheet 3 - Del 3: Transformation af kuberne</h1>
+
+    <h2>Hvilke matricer bruger vi?</h2>
+
+    <p>
+      I del 1 og 2 bruger vi den samme enhedskube. Hvert hjørne har en
+      position (x, y, z), som vertex-shaderen udvider til (x, y, z, 1).
+      Det sidste 1-tal gør det muligt at flytte hjørnet ved hjælp af en
+      4 × 4-matrix. Vi kalder denne position for p.
+    </p>
+
+    <ul>
+      <li>
+        <strong>Translation:</strong> T(tx, ty, tz) svarer til
+        <code>translate(tx, ty, tz)</code>. Vi bruger translation til at
+        flytte kubens centrum til origo og til at placere kuberne ved
+        siden af hinanden.
+      </li>
+      <li>
+        <strong>Rotation:</strong> Rx(α) og Ry(β) svarer til
+        <code>rotateX(α)</code> og <code>rotateY(β)</code>.
+        De roterer kuben omkring henholdsvis x-aksen og y-aksen.
+      </li>
+      <li>
+        <strong>View-matricen:</strong> V = <code>lookAt(eye, at, up)</code>
+        omregner fra verdenskoordinater til kameraets koordinatsystem.
+        Her angiver <code>eye</code> kameraets position, <code>at</code>
+        det punkt, kameraet ser mod, og <code>up</code> retningen opad.
+      </li>
+      <li>
+        <strong>Projektionsmatricen:</strong> I del 1 bruger vi
+        <code>ortho(left, right, bottom, top, near, far)</code>.
+        I del 2 bruger vi <code>perspective(fovy, aspect, near, far)</code>
+        med et lodret synsfelt på 45 grader. Med perspektivprojektion
+        ser de dele af kuben, der er længere fra kameraet, mindre ud.
+      </li>
+      <li>
+        <strong>Dybdekorrektion:</strong> M_st omregner dybdeintervallet
+        fra MV.js til det interval, WebGPU bruger. Efter division med w
+        svarer det til at omregne dybden fra [-1, 1] til [0, 1].
+      </li>
+    </ul>
+
+    <h2>Del 1: Kuben i isometrisk visning</h2>
+
+    <p>
+      Kubens modsatte hjørner ligger i (0, 0, 0) og (1, 1, 1).
+      Den har derfor allerede den ønskede placering i verden, og dens
+      modelmatrix er identitetsmatricen. Vi placerer kameraet langs
+      kubens rumdiagonal og lader det se mod centrum. Sammen med den
+      ortografiske projektion betyder det, at lige lange kanter langs
+      x-, y- og z-aksen får samme længde på skærmen.
+    </p>
+
+    <p><code>p_clip = M_st · P_ortho · V_iso · p</code></p>
+
+    <h2>Del 2: Tre perspektiviske visninger</h2>
+
+    <p>
+      Alle tre kuber deler kamera og perspektivprojektion. I koden samler vi
+      disse matricer i <code>viewProjection = M_st · P_persp · V_front</code>.
+      Hver kube har sin egen modelmatrix, som vertex-shaderen vælger med
+      <code>instance_index</code>.
+    </p>
+
+    <p>
+      Vi bruger C = T(-cx, -cy, -cz) til at flytte kubens centrum til origo.
+      For vores enhedskube er centrum (0.5, 0.5, 0.5). Når vi centrerer
+      kuben før en rotation, drejer den om sit eget centrum. I formlerne
+      nedenfor er d den afstand, vi flytter de yderste kuber til siden.
+      Matricen længst til højre virker først på punktet p.
+    </p>
+
+    <h3>Venstre kube: Etpunktsperspektiv</h3>
+
+    <p><code>p_clip = viewProjection · T(-d, 0, 0) · C · p</code></p>
+
+    <p>
+      Vi centrerer kuben og flytter den mod venstre. Kubens forside er
+      parallel med billedplanet. Derfor forbliver dens vandrette og lodrette
+      kanter parallelle på skærmen, mens kanterne i dybderetningen peger
+      mod ét forsvindingspunkt.
+    </p>
+
+    <h3>Midterste kube: Topunktsperspektiv</h3>
+
+    <p><code>p_clip = viewProjection · Ry(β) · C · p</code></p>
+
+    <p>
+      Vi centrerer kuben og roterer den om y-aksen. De lodrette kanter
+      forbliver parallelle, mens kanterne langs kubens x- og z-akser nu
+      peger mod hvert sit forsvindingspunkt.
+    </p>
+
+    <h3>Højre kube: Trepunktsperspektiv</h3>
+
+    <p><code>p_clip = viewProjection · T(d, 0, 0) · Rx(α) · Ry(β) · C · p</code></p>
+
+    <p>
+      Vi centrerer først kuben, roterer den om y-aksen og derefter om
+      x-aksen. Til sidst flytter vi den mod højre. Rotationen om x-aksen
+      hælder også de kanter, der før var lodrette. Derfor har alle tre
+      kantretninger nu hvert sit forsvindingspunkt.
+    </p>
+  </body>
+</html>

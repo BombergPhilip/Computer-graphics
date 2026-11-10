@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Worksheet 1 - Part 5</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        offsetY: f32,
+      };
+
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) color: vec3f,
+      };
+
+      @vertex
+      fn main_vs(@location(0) inPos: vec2f, @location(1) inColor: vec3f) -> VSOut {
+        var vsOut: VSOut;
+        let position = inPos + vec2f(0.0, uniforms.offsetY);
+        vsOut.position = vec4f(position, 0.0, 1.0);
+        vsOut.color = inColor;
+        return vsOut;
+      }
+
+      @fragment
+      fn main_fs(@location(0) inColor: vec3f) -> @location(0) vec4f {
+        return vec4f(inColor, 1.0);
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <canvas id="my-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+  </body>
+</html>

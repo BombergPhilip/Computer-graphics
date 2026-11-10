@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Worksheet 6 - Part 1</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        mvp: mat4x4f,
+      };
+
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var mySampler: sampler;
+      @group(0) @binding(2) var myTexture: texture_2d<f32>;
+
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) texCoords: vec2f,
+      };
+
+      @vertex
+      fn main_vs(
+        @location(0) inPos: vec3f,
+        @location(1) inTexCoords: vec2f
+      ) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * vec4f(inPos, 1.0);
+        vsOut.texCoords = inTexCoords;
+        return vsOut;
+      }
+
+      @fragment
+      fn main_fs(@location(0) texCoords: vec2f) -> @location(0) vec4f {
+        return textureSample(myTexture, mySampler, texCoords);
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <canvas id="my-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+  </body>
+</html>

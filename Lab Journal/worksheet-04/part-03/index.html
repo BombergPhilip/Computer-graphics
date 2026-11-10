@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Worksheet 4 - Part 3</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        mvp: mat4x4f,
+      };
+
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) color: vec3f,
+      };
+
+      @vertex
+      fn main_vs(@location(0) inPos: vec3f) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * vec4f(inPos, 1.0);
+        let normal = normalize(inPos);
+        let kd = 0.5 * inPos + vec3f(0.5);
+        let lightDirection = vec3f(0.0, 0.0, -1.0);
+        let towardLight = -lightDirection;
+        let Le = vec3f(1.0, 1.0, 1.0);
+        let cosTheta = max(dot(normal, towardLight), 0.0);
+        vsOut.color = kd * Le * cosTheta;
+        return vsOut;
+      }
+
+      @fragment
+      fn main_fs(@location(0) inColor: vec3f) -> @location(0) vec4f {
+        return vec4f(inColor, 1.0);
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <canvas id="my-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+    <div>
+      <button id="decreaseButton" type="button" disabled>-</button>
+      <span id="levelLabel">Niveau 0</span>
+      <button id="increaseButton" type="button">+</button>
+      <button id="orbitButton" type="button">Start kamerarotation</button>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Worksheet 7 - Part 2</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script type="text/javascript" src="../../resources/genmipmap.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        mvp: mat4x4f,
+        mtex: mat4x4f,
+      };
+
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var cubeSampler: sampler;
+      @group(0) @binding(2) var cubeMap: texture_cube<f32>;
+
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) direction: vec3f,
+      };
+
+      @vertex
+      fn main_vs(@location(0) inPos: vec3f) -> VSOut {
+        var vsOut: VSOut;
+        let p = vec4f(inPos, 1.0);
+
+        vsOut.position = uniforms.mvp * p;
+        vsOut.direction = (uniforms.mtex * p).xyz;
+        return vsOut;
+      }
+
+      @fragment
+      fn main_fs(@location(0) direction: vec3f) -> @location(0) vec4f {
+        return textureSample(cubeMap, cubeSampler, normalize(direction));
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <canvas id="my-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+    <div>
+      <button id="decreaseButton" type="button" disabled>-</button>
+      <span id="levelLabel">Niveau 0</span>
+      <button id="increaseButton" type="button">+</button>
+      <button id="orbitButton" type="button">Start kamerarotation</button>
+    </div>
+    <section>
+      <h2>Hvordan finder vi retningen til baggrunden?</h2>
+
+      <p>
+        Vi tegner baggrunden som to trekanter, der dækker hele canvaset.
+        Hjørnerne er allerede angivet i clip space med w = 1 og z = 0.999.
+        Derfor bruger vi identitetsmatricen som baggrundens MVP-matrix.
+      </p>
+
+      <p>
+        For at finde farven i en pixel skal vi kende den retning, kameraet
+        ser i gennem pixlen. Først bruger vi den inverse projektionsmatrix
+        til at føre punktet tilbage til kamerakoordinater. Derefter bruger
+        vi den inverse kamerarotation til at udtrykke retningen i
+        verdenskoordinater. Vi udelader kameraets translation, fordi opslaget
+        i cubemappet kun afhænger af retningen.
+      </p>
+
+      <p>
+        Vores teksturmatrix for baggrunden er derfor
+        <code>Mtex = inverseRotation · inverseProjection</code>.
+        For kuglen er teksturmatricen identitetsmatricen, da dens
+        overfladenormal allerede giver opslagets retning i verdenskoordinater.
+      </p>
+    </section>
+  </body>
+</html>

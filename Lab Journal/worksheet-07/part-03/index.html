@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Worksheet 7 - Part 3</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script type="text/javascript" src="../../resources/genmipmap.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        mvp: mat4x4f,
+        mtex: mat4x4f,
+        eye: vec4f,
+        reflective: u32,
+      };
+
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var cubeSampler: sampler;
+      @group(0) @binding(2) var cubeMap: texture_cube<f32>;
+
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) direction: vec3f,
+        @location(1) worldPos: vec3f,
+      };
+
+      @vertex
+      fn main_vs(@location(0) inPos: vec3f) -> VSOut {
+        var vsOut: VSOut;
+        let p = vec4f(inPos, 1.0);
+
+        vsOut.position = uniforms.mvp * p;
+        vsOut.direction = (uniforms.mtex * p).xyz;
+        vsOut.worldPos = inPos;
+
+        return vsOut;
+      }
+
+      @fragment
+      fn main_fs(
+        @location(0) direction: vec3f,
+        @location(1) worldPos: vec3f
+      ) -> @location(0) vec4f {
+        var lookupDirection = normalize(direction);
+
+        if (uniforms.reflective == 1u) {
+          let normal = normalize(direction);
+          let incident = normalize(worldPos - uniforms.eye.xyz);
+          lookupDirection = reflect(incident, normal);
+        }
+
+        return textureSample(cubeMap, cubeSampler, lookupDirection);
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <canvas id="my-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+    <div>
+      <button id="decreaseButton" type="button" disabled>-</button>
+      <span id="levelLabel">Niveau 0</span>
+      <button id="increaseButton" type="button">+</button>
+      <button id="orbitButton" type="button">Start kamerarotation</button>
+    </div>
+  </body>
+</html>

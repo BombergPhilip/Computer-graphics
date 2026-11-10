@@ -1,0 +1,109 @@
+<!doctype html>
+  <head>
+    <title>Worksheet 4 - Part 6</title>
+  </head>
+
+  <body>
+    <h1>Worksheet 4 - Del 6: Refleksion over belysning og shading</h1>
+
+    <h2>a) Hvad er forskellen på flat shading, Gouraud shading og Phong shading?</h2>
+
+    <p>
+      Ved flat shading får hver trekant én fælles farve. Vi kunne implementere
+      det ved at beregne trekantens fladenormal ud fra dens tre hjørner:
+      <code>N = normalize(cross(p1 - p0, p2 - p0))</code>. Derefter kunne vi
+      beregne lyset ved trekantens midtpunkt og bruge den samme beregnede
+      farve over hele trekanten. På kuglen ville det gøre de enkelte
+      trekantede flader tydelige.
+    </p>
+
+    <p>
+      I del 4 brugte vi Gouraud shading. Her beregnede vi lyset i
+      vertex-shaderen ved hvert hjørne og sendte den færdige farve videre.
+      GPU'en interpolerede farverne over trekanten. Et smalt genskin kan
+      derfor blive svagt eller forsvinde, hvis dets lyseste punkt ligger
+      mellem hjørnerne.
+    </p>
+
+    <p>
+      I del 5 brugte vi Phong shading. Her sendte vertex-shaderen position
+      og normal videre. Fragment-shaderen modtog de interpolerede værdier,
+      normaliserede normalen igen og beregnede lyset for hvert fragment.
+      Det gør Phong shading bedre egnet til skarpe genskin, især når kuglen
+      består af få trekanter. Begge dele bruger den samme Phong-refleksionsmodel.
+      Forskellen er, hvor på trekanten vi beregner lyset.
+    </p>
+
+    <h2>b) Hvad er forskellen på retningsbestemt lys og en punktlyskilde?</h2>
+
+    <p>
+      Ved retningsbestemt lys har lysstrålerne samme retning overalt.
+      I vores kode bevæger lyset sig i retningen <code>(0, 0, -1)</code>,
+      så retningen fra overfladen mod lyset er <code>(0, 0, 1)</code>.
+      Den gælder for alle punkter på kuglen, og vi bruger ingen
+      afstandsdæmpning.
+    </p>
+
+    <p>
+      En punktlyskilde har en bestemt position. For hvert punkt på overfladen
+      skal retningen mod lyset derfor beregnes som
+      <code>normalize(lightPos - worldPos)</code>. Afstanden har også
+      betydning: For en idealiseret punktlyskilde falder belysningen med
+      kvadratet på afstanden.
+    </p>
+
+    <h2>c) Har kameraets position betydning for belysningen?</h2>
+
+    <p>
+      Ja, for det spejlende bidrag. I del 5 beregner vi retningen mod
+      kameraet som <code>normalize(uniforms.eye.xyz - worldPos)</code>.
+      Når kameraet kredser om kuglen, ændrer denne retning sig. Genskinnet
+      bliver stærkest dér, hvor den reflekterede lysstråle peger mod kameraet.
+    </p>
+
+    <p>
+      For et bestemt punkt på kuglen er det diffuse bidrag og omgivelseslyset
+      uafhængige af kameraets position. Kameraet kan dog bevæge sig om på
+      kuglens mørke side, så det billede, vi ser, ændrer sig, selv når
+      spejlrefleksionen er slået fra.
+    </p>
+
+    <h2>d) Hvad sker der, hvis det spejlende bidrag sættes til (0, 0, 0)?</h2>
+
+    <p>
+      Det hvide genskin forsvinder, og kuglen fremstår mere mat.
+      I vores program kan vi opnå det ved at sætte <code>ks</code>-skyderen
+      til 0. Den diffuse belysning og omgivelseslyset bidrager stadig til
+      kuglens farve. Når <code>ks = 0</code>, har glansskyderen heller
+      ingen synlig effekt, fordi hele det spejlende bidrag ganges med nul.
+    </p>
+
+    <h2>e) Hvad sker der, når glanseksponenten øges?</h2>
+
+    <p>
+      Når vi øger <code>shininess</code>, bliver genskinnet smallere
+      og skarpere. I shaderen beregner vi <code>pow(cosPhi, shininess)</code>.
+      Ved perfekt refleksion er <code>cosPhi = 1</code>, og resultatet er
+      stadig 1. Lidt væk fra denne retning er <code>cosPhi</code> under 1,
+      og en højere eksponent får bidraget til at falde hurtigere. Et mindre
+      område af kuglen får derfor et synligt genskin.
+    </p>
+
+    <h2>f) I hvilket koordinatsystem beregner vi lyset?</h2>
+
+    <p>
+      Vi beregner lyset i verdenskoordinater. Kuglen er en enhedskugle med
+      centrum i origo, og dens modelmatrix er identitetsmatricen. Derfor kan
+      vi bruge <code>inPos</code> direkte som verdensposition og
+      <code>normalize(inPos)</code> som udadrettet normal ved hvert hjørne.
+      Lysretningen og kameraets position er angivet i det samme koordinatsystem.
+    </p>
+
+    <p>
+      I del 5 kan man se forskellen direkte i vertex-shaderen:
+      <code>vsOut.worldPos = inPos</code> giver fragment-shaderen positionen
+      til lysberegningen, mens <code>uniforms.mvp * vec4f(inPos, 1.0)</code>
+      giver positionen i clip space, som GPU'en bruger til at tegne trekanten.
+    </p>
+  </body>
+</html>

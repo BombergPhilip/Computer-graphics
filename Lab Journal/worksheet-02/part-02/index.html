@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Worksheet 2 - Part 2</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) color: vec3f,
+      };
+
+      @vertex
+      fn main_vs(@location(0) inPos: vec2f, @location(1) inColor: vec3f) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = vec4f(inPos, 0.0, 1.0);
+        vsOut.color = inColor;
+        return vsOut;
+      }
+
+      @fragment
+      fn main_fs(@location(0) inColor: vec3f) -> @location(0) vec4f {
+        return vec4f(inColor, 1.0);
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <canvas id="my-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+    <div>
+      <label for="pointColorMenu">Point color</label>
+      <select id="pointColorMenu">
+        <option value="black" selected>Black</option>
+        <option value="red">Red</option>
+        <option value="green">Green</option>
+        <option value="blue">Blue</option>
+        <option value="white">White</option>
+      </select>
+
+      <label for="clearColorMenu">Clear color</label>
+      <select id="clearColorMenu">
+        <option value="cornflower" selected>Cornflower blue</option>
+        <option value="black">Black</option>
+        <option value="red">Red</option>
+        <option value="green">Green</option>
+        <option value="blue">Blue</option>
+        <option value="white">White</option>
+      </select>
+
+      <button id="clearButton" type="button">Clear canvas</button>
+    </div>
+  </body>
+</html>

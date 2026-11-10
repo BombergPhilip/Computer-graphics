@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Worksheet 4 - Part 1</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        mvp: mat4x4f,
+      };
+
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+      @vertex
+      fn main_vs(@location(0) inPos: vec3f) -> @builtin(position) vec4f {
+        return uniforms.mvp * vec4f(inPos, 1.0);
+      }
+
+      @fragment
+      fn main_fs() -> @location(0) vec4f {
+        return vec4f(1.0, 1.0, 1.0, 1.0);
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <canvas id="my-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+    <div>
+      <button id="decreaseButton" type="button" disabled>-</button>
+      <span id="levelLabel">Niveau 0</span>
+      <button id="increaseButton" type="button">+</button>
+    </div>
+  </body>
+</html>

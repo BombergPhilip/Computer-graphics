@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Worksheet 4 - Part 4</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        mvp: mat4x4f,
+        eye: vec4f,
+        kd: f32,
+        ks: f32,
+        shininess: f32,
+        Le: f32,
+        La: f32,
+      };
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) color: vec3f,
+      };
+
+      @vertex
+      fn main_vs(@location(0) inPos: vec3f) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * vec4f(inPos, 1.0);
+        let normal = normalize(inPos);
+        let lightDirection = vec3f(0.0, 0.0, -1.0);
+        let towardLight = -lightDirection;
+        let towardEye = normalize(uniforms.eye.xyz - inPos);
+
+        let diffuseColor = vec3f(0.2, 0.5, 0.9);
+        let specularColor = vec3f(1.0, 1.0, 1.0);
+        let kd = uniforms.kd * diffuseColor;
+        let ks = uniforms.ks * specularColor;
+
+        let ambient = kd * uniforms.La;
+        let cosTheta = max(dot(normal, towardLight), 0.0);
+        let diffuse = kd * uniforms.Le * cosTheta;
+
+        var specular = vec3f(0.0);
+        if (cosTheta > 0.0) {
+          let reflected = reflect(lightDirection, normal);
+          let cosPhi = max(dot(reflected, towardEye), 0.0);
+          specular = ks * uniforms.Le * pow(cosPhi, uniforms.shininess);
+        }
+
+        vsOut.color = ambient + diffuse + specular;
+        return vsOut;
+      }
+
+      @fragment
+      fn main_fs(@location(0) inColor: vec3f) -> @location(0) vec4f {
+        return vec4f(inColor, 1.0);
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <canvas id="my-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+    <div>
+      <button id="decreaseButton" type="button" disabled>-</button>
+      <span id="levelLabel">Niveau 0</span>
+      <button id="increaseButton" type="button">+</button>
+      <button id="orbitButton" type="button">Start kamerarotation</button>
+    </div>
+    <div>
+      <label for="kdSlider">Diffus refleksion (kd)</label>
+      <input id="kdSlider" type="range" min="0" max="1" step="0.01" value="0.7">
+    </div>
+
+    <div>
+      <label for="ksSlider">Spejlrefleksion (ks)</label>
+      <input id="ksSlider" type="range" min="0" max="1" step="0.01" value="0.6">
+    </div>
+
+    <div>
+      <label for="shininessSlider">Glans (s)</label>
+      <input id="shininessSlider" type="range" min="1" max="128" step="1" value="32">
+    </div>
+
+    <div>
+      <label for="leSlider">Direkte lys (Le)</label>
+      <input id="leSlider" type="range" min="0" max="1" step="0.01" value="1">
+    </div>
+
+    <div>
+      <label for="laSlider">Omgivelseslys (La)</label>
+      <input id="laSlider" type="range" min="0" max="1" step="0.01" value="0.15">
+    </div>
+  </body>
+</html>
