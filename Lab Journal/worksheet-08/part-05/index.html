@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Worksheet 8 - Part 5</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script type="text/javascript" src="../../resources/OBJParser.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        mvp: mat4x4f,
+        visibility: f32,
+      };
+
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var mySampler: sampler;
+      @group(0) @binding(2) var myTexture: texture_2d<f32>;
+
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) texCoords: vec2f,
+      };
+
+      @vertex
+      fn main_vs(
+        @location(0) inPos: vec3f,
+        @location(1) inTexCoords: vec2f
+      ) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * vec4f(inPos, 1.0);
+        vsOut.texCoords = inTexCoords;
+        return vsOut;
+      }
+
+      @fragment
+      fn main_fs(@location(0) texCoords: vec2f) -> @location(0) vec4f {
+        let color = textureSample(myTexture, mySampler, texCoords);
+
+        if (uniforms.visibility == 0.0) {
+          return vec4f(0.0, 0.0, 0.0, 0.4);
+        }
+
+        return color;
+      }
+    </script>
+    <script id="teapot-wgsl" type="x-shader">
+      struct Uniforms {
+        model: mat4x4f,
+        mvp: mat4x4f,
+        shadowMvp: mat4x4f,
+        light: vec4f,
+      };
+
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) worldPos: vec3f,
+        @location(1) normal: vec3f,
+      };
+
+      @vertex
+      fn teapot_vs(
+        @location(0) inPos: vec4f,
+        @location(1) inNormal: vec4f
+      ) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * inPos;
+        vsOut.worldPos = (uniforms.model * inPos).xyz;
+        vsOut.normal = inNormal.xyz;
+        return vsOut;
+      }
+
+      @fragment
+      fn teapot_fs(
+        @location(0) worldPos: vec3f,
+        @location(1) interpolatedNormal: vec3f
+      ) -> @location(0) vec4f {
+        let n = normalize(interpolatedNormal);
+        let towardLight = normalize(uniforms.light.xyz - worldPos);
+        let towardEye = normalize(-worldPos);
+
+        let kd = vec3f(0.72);
+        let cosTheta = max(dot(n, towardLight), 0.0);
+        let ambient = 0.2 * kd;
+        let diffuse = 0.8 * kd * cosTheta;
+
+        var specular = vec3f(0.0);
+        if (cosTheta > 0.0) {
+          let reflected = reflect(-towardLight, n);
+          let cosPhi = max(dot(reflected, towardEye), 0.0);
+          specular = vec3f(0.3 * pow(cosPhi, 32.0));
+        }
+
+        return vec4f(ambient + diffuse + specular, 1.0);
+      }
+
+      @vertex
+      fn shadow_vs(@location(0) inPos: vec4f) -> @builtin(position) vec4f {
+        return uniforms.shadowMvp * inPos;
+      }
+
+      @fragment
+      fn shadow_fs() -> @location(0) vec4f {
+        return vec4f(0.0, 0.0, 0.0, 0.4);
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <nav>
+      <a href="../part-04/index.html">Forrige part</a> |
+      <a href="../index.html">Worksheet 8</a> |
+    </nav>
+    <h1>Worksheet 8 - Part 5</h1>
+    <h2>hovedansvarlig: Philip[s245218]</h2>
+    <canvas id="my-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+    <button id="lightButton" type="button">Stop lysrotation</button>
+  </body>
+</html>

@@ -80,10 +80,10 @@ async function main() {
       const color = (fieldX + fieldY) % 2 === 0 ? 255 : 0;
 
       const i = 4 * (y * texSize + x);
-      myTexels[i]     = color; // R
-      myTexels[i + 1] = color; // G
-      myTexels[i + 2] = color; // B
-      myTexels[i + 3] = 255;   // A
+      myTexels[i]     = color;
+      myTexels[i + 1] = color;
+      myTexels[i + 2] = color;
+      myTexels[i + 3] = 255;
     }
   }
 

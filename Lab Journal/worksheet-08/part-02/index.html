@@ -1,69 +1,53 @@
-
 <!doctype html>
 <html>
-<head>
-    <meta charset="UTF-8">
+  <head>
     <title>Worksheet 8 - Part 2</title>
-
+    <script type="text/javascript" src="../../resources/MV.js"></script>
     <script id="wgsl" type="x-shader">
-        struct Uniforms {
-            transform: mat4x4f,
-            visibility: vec4f,
-        };
+      struct Uniforms {
+        mvp: mat4x4f,
+        visibility: f32,
+      };
 
-        @group(0) @binding(0)
-        var<uniform> uniforms: Uniforms;
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var mySampler: sampler;
+      @group(0) @binding(2) var myTexture: texture_2d<f32>;
 
-        @group(0) @binding(1)
-        var textureMap: texture_2d<f32>;
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) texCoords: vec2f,
+      };
 
-        @group(0) @binding(2)
-        var textureSampler: sampler;
+      @vertex
+      fn main_vs(
+        @location(0) inPos: vec3f,
+        @location(1) inTexCoords: vec2f
+      ) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * vec4f(inPos, 1.0);
+        vsOut.texCoords = inTexCoords;
+        return vsOut;
+      }
 
-        struct VSOut {
-            @builtin(position) position: vec4f,
-            @location(0) texCoord: vec2f,
-        };
-
-        @vertex
-        fn main_vs(
-            @location(0) position: vec3f,
-            @location(1) texCoord: vec2f
-        ) -> VSOut {
-            var output: VSOut;
-
-            output.position =
-                uniforms.transform * vec4f(position, 1.0);
-
-            output.texCoord = texCoord;
-
-            return output;
-        }
-
-        @fragment
-        fn main_fs(
-            @location(0) texCoord: vec2f
-        ) -> @location(0) vec4f {
-            let color = textureSample(
-                textureMap,
-                textureSampler,
-                texCoord
-            );
-
-            return vec4f(
-                color.rgb * uniforms.visibility.x,
-                color.a
-            );
-        }
+      @fragment
+      fn main_fs(@location(0) texCoords: vec2f) -> @location(0) vec4f {
+        let color = textureSample(myTexture, mySampler, texCoords);
+        return vec4f(color.rgb * uniforms.visibility, color.a);
+      }
     </script>
-
-<script type="text/javascript" src="../../resources/MV.js"></script>
-<script type="text/javascript" src="myscript.js"></script>
-</head>
-
-<body>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <nav>
+      <a href="../part-01/index.html">Forrige part</a> |
+      <a href="../index.html">Worksheet 8</a> |
+      <a href="../part-03/index.html">Næste part</a>
+    </nav>
+    <h1>Worksheet 8 - Part 2</h1>
+    <h2>hovedansvarlig: Nicklas[s245887]</h2>
     <canvas id="my-canvas" width="512" height="512">
-        Please use a browser that supports HTML5 canvas.
+      Please use a browser that supports HTML5 canvas.
     </canvas>
-</body>
+    <button id="lightButton" type="button">Stop lysrotation</button>
+  </body>
 </html>

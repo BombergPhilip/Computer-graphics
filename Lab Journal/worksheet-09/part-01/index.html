@@ -1,132 +1,112 @@
-
 <!doctype html>
 <html>
-<head>
-    <meta charset="UTF-8">
+  <head>
     <title>Worksheet 9 - Part 1</title>
-
     <script type="text/javascript" src="../../resources/MV.js"></script>
     <script type="text/javascript" src="../../resources/OBJParser.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        mvp: mat4x4f,
+        visibility: f32,
+      };
 
-    <script id="ground-wgsl" type="x-shader">
-        struct Uniforms {
-            mvp: mat4x4f,
-        };
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var mySampler: sampler;
+      @group(0) @binding(2) var myTexture: texture_2d<f32>;
 
-        @group(0) @binding(0)
-        var<uniform> uniforms: Uniforms;
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) texCoords: vec2f,
+      };
 
-        @group(0) @binding(1)
-        var marble: texture_2d<f32>;
+      @vertex
+      fn main_vs(
+        @location(0) inPos: vec3f,
+        @location(1) inTexCoords: vec2f
+      ) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * vec4f(inPos, 1.0);
+        vsOut.texCoords = inTexCoords;
+        return vsOut;
+      }
 
-        @group(0) @binding(2)
-        var marbleSampler: sampler;
+      @fragment
+      fn main_fs(@location(0) texCoords: vec2f) -> @location(0) vec4f {
+        let color = textureSample(myTexture, mySampler, texCoords);
 
-        struct VSOut {
-            @builtin(position) position: vec4f,
-            @location(0) uv: vec2f,
-        };
-
-        @vertex
-        fn main_vs(
-            @location(0) position: vec3f,
-            @location(1) uv: vec2f
-        ) -> VSOut {
-            var output: VSOut;
-
-            output.position =
-                uniforms.mvp * vec4f(position, 1.0);
-
-            output.uv = uv;
-
-            return output;
+        if (uniforms.visibility == 0.0) {
+          return vec4f(0.0, 0.0, 0.0, 0.4);
         }
 
-        @fragment
-        fn main_fs(
-            @location(0) uv: vec2f
-        ) -> @location(0) vec4f {
-            return textureSample(
-                marble,
-                marbleSampler,
-                uv
-            );
-        }
+        return color;
+      }
     </script>
-
     <script id="teapot-wgsl" type="x-shader">
-        struct Uniforms {
-            mvp: mat4x4f,
-            model: mat4x4f,
-            lightPosition: vec4f,
-        };
+      struct Uniforms {
+        model: mat4x4f,
+        mvp: mat4x4f,
+        light: vec4f,
+      };
 
-        @group(0) @binding(0)
-        var<uniform> uniforms: Uniforms;
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-        struct VSOut {
-            @builtin(position) position: vec4f,
-            @location(0) worldPosition: vec3f,
-            @location(1) normal: vec3f,
-        };
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) worldPos: vec3f,
+        @location(1) normal: vec3f,
+      };
 
-        @vertex
-        fn main_vs(
-            @location(0) position: vec4f,
-            @location(1) normal: vec4f
-        ) -> VSOut {
-            var output: VSOut;
+      @vertex
+      fn teapot_vs(
+        @location(0) inPos: vec4f,
+        @location(1) inNormal: vec4f
+      ) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * inPos;
+        vsOut.worldPos = (uniforms.model * inPos).xyz;
+        vsOut.normal = inNormal.xyz;
+        return vsOut;
+      }
 
-            let world = uniforms.model * position;
+      @fragment
+      fn teapot_fs(
+        @location(0) worldPos: vec3f,
+        @location(1) interpolatedNormal: vec3f
+      ) -> @location(0) vec4f {
+        let n = normalize(interpolatedNormal);
+        let towardLight = normalize(uniforms.light.xyz - worldPos);
+        let towardEye = normalize(-worldPos);
 
-            output.position = uniforms.mvp * position;
-            output.worldPosition = world.xyz;
+        let kd = vec3f(0.72);
+        let cosTheta = max(dot(n, towardLight), 0.0);
+        let ambient = 0.2 * kd;
+        let diffuse = 0.8 * kd * cosTheta;
 
-            output.normal = normalize(
-                (uniforms.model * vec4f(normal.xyz, 0.0)).xyz
-            );
-
-            return output;
+        var specular = vec3f(0.0);
+        if (cosTheta > 0.0) {
+          let reflected = reflect(-towardLight, n);
+          let cosPhi = max(dot(reflected, towardEye), 0.0);
+          specular = vec3f(0.3 * pow(cosPhi, 32.0));
         }
 
-        @fragment
-        fn main_fs(
-            input: VSOut
-        ) -> @location(0) vec4f {
-            let N = normalize(input.normal);
-            let L = normalize(
-                uniforms.lightPosition.xyz - input.worldPosition
-            );
-            let V = normalize(-input.worldPosition);
-            let H = normalize(L + V);
-
-            let diffuse = max(dot(N, L), 0.0);
-            let specular = pow(max(dot(N, H), 0.0), 32.0);
-
-            let materialColor = vec3f(0.56, 0.58, 0.62);
-            let ambient = 0.22;
-
-            let rgb =
-                materialColor * (ambient + 0.70 * diffuse)
-                + vec3f(0.30, 0.30, 0.30) * specular;
-
-            return vec4f(rgb, 1.0);
-        }
+        return vec4f(ambient + diffuse + specular, 1.0);
+      }
     </script>
-
     <script type="text/javascript" src="myscript.js"></script>
-</head>
-
-<body>
+  </head>
+  <body>
+    <nav>
+      <a href="../index.html">Worksheet 9</a> |
+      <a href="../part-02-03/index.html">Næste part</a>
+    </nav>
+    <h1>Worksheet 9 - Part 1</h1>
+    <h2>hovedansvarlig: Philip[s245218]</h2>
     <canvas id="my-canvas" width="512" height="512">
-        Please use a browser that supports HTML5 canvas.
+      Please use a browser that supports HTML5 canvas.
     </canvas>
-
     <div>
-        <button id="toggleTeapot" type="button">Pause teapot</button>
-        <button id="toggleLight" type="button">Pause lys</button>
+      <button id="lightButton" type="button">Stop lysrotation</button>
+      <button id="teapotButton" type="button">Stop tekandens bevægelse</button>
     </div>
-
-    <p id="status" role="alert"></p>
-</body>
+  </body>
 </html>

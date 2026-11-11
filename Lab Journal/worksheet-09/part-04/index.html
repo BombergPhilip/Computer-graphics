@@ -1,339 +1,196 @@
-
 <!doctype html>
-<html lang="da">
-<head>
-    <meta charset="UTF-8">
+<html>
+  <head>
     <title>Worksheet 9 - Part 4</title>
+    <script type="text/javascript" src="../../resources/MV.js"></script>
+    <script type="text/javascript" src="../../resources/OBJParser.js"></script>
+    <script id="wgsl" type="x-shader">
+      struct Uniforms {
+        mvp: mat4x4f,
+        visibility: f32,
+      };
 
-    <script src="../../resources/MV.js"></script>
-    <script src="../../resources/OBJParser.js"></script>
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var mySampler: sampler;
+      @group(0) @binding(2) var myTexture: texture_2d<f32>;
 
-    <script id="ground-wgsl" type="x-shader">
-        struct Uniforms {
-            mvp: mat4x4f,
-            showDepth: vec4f,
-            lightVP: mat4x4f,
-        };
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) texCoords: vec2f,
+        @location(1) worldPos: vec3f,
+      };
 
-        @group(0) @binding(0)
-        var<uniform> uniforms: Uniforms;
+      @vertex
+      fn main_vs(
+        @location(0) inPos: vec3f,
+        @location(1) inTexCoords: vec2f
+      ) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * vec4f(inPos, 1.0);
+        vsOut.texCoords = inTexCoords;
+        vsOut.worldPos = inPos;
+        return vsOut;
+      }
 
-        @group(0) @binding(1)
-        var marble: texture_2d<f32>;
+      @fragment
+      fn main_fs(
+        @location(0) texCoords: vec2f,
+        @location(1) worldPos: vec3f
+      ) -> @location(0) vec4f {
+        let marble = textureSample(myTexture, mySampler, texCoords);
 
-        @group(0) @binding(2)
-        var marbleSampler: sampler;
-
-        @group(0) @binding(3)
-        var lightDepthMap: texture_2d<f32>;
-
-        struct VSOut {
-            @builtin(position) position: vec4f,
-            @location(0) uv: vec2f,
-            @location(1) worldPosition: vec3f,
-        };
-
-        @vertex
-        fn main_vs(
-            @location(0) position: vec3f,
-            @location(1) uv: vec2f
-        ) -> VSOut {
-            var output: VSOut;
-
-            output.position =
-                uniforms.mvp * vec4f(position, 1.0);
-
-            output.uv = uv;
-            output.worldPosition = position;
-
-            return output;
+        if (shadowSettings.showMap == 1u) {
+          let depth = readShadowDepth(texCoords);
+          return vec4f(vec3f(depth), 1.0);
         }
 
-        // Bløde skygger med 5x5 PCF
-        fn shadowVisibility(worldPosition: vec3f) -> f32 {
-            let clip = uniforms.lightVP * vec4f(
-                worldPosition, 1.0
-            );
+        let visibility = lightVisibility(worldPos);
+        let ambient = 0.30 * marble.rgb;
+        let direct = 0.70 * marble.rgb;
 
-            if (clip.w <= 0.0) {
-                return 1.0;
-            }
-
-            let ndc = clip.xyz / clip.w;
-
-            let uv = vec2f(
-                ndc.x * 0.5 + 0.5,
-                0.5 - ndc.y * 0.5
-            );
-
-            if (uv.x < 0.0 || uv.x >= 1.0 ||
-                uv.y < 0.0 || uv.y >= 1.0 ||
-                ndc.z < 0.0 || ndc.z > 1.0) {
-                return 1.0;
-            }
-
-            let dimensions = vec2i(
-                textureDimensions(lightDepthMap)
-            );
-
-            let center = vec2i(
-                uv * vec2f(dimensions)
-            );
-
-            let bias = 0.004;
-            let spread = 4;
-
-            var litSamples = 0.0;
-
-            for (var y: i32 = -2; y <= 2; y = y + 1) {
-                for (var x: i32 = -2; x <= 2; x = x + 1) {
-                    let samplePixel = clamp(
-                        center + vec2i(x, y) * spread,
-                        vec2i(0),
-                        dimensions - vec2i(1)
-                    );
-
-                    let storedDepth = textureLoad(
-                        lightDepthMap,
-                        samplePixel,
-                        0
-                    ).r;
-
-                    if (ndc.z <= storedDepth + bias) {
-                        litSamples += 1.0;
-                    }
-                }
-            }
-
-            let visibility = litSamples / 25.0;
-
-            return 0.45 + 0.55 * visibility;
-        }
-
-        @fragment
-        fn main_fs(
-            @location(0) uv: vec2f,
-            @location(1) worldPosition: vec3f
-        ) -> @location(0) vec4f {
-            let marbleColor = textureSample(
-                marble,
-                marbleSampler,
-                uv
-            );
-
-            // Visualisering af shadow map
-            if (uniforms.showDepth.x > 0.5) {
-                let dimensions = textureDimensions(
-                    lightDepthMap
-                );
-
-                let texel = vec2i(
-                    clamp(
-                        uv,
-                        vec2f(0.0),
-                        vec2f(0.99999)
-                    ) * vec2f(dimensions)
-                );
-
-                let depth = textureLoad(
-                    lightDepthMap,
-                    texel,
-                    0
-                ).r;
-
-                let gray = clamp(
-                    (1.0 - depth) * 12.0,
-                    0.0,
-                    1.0
-                );
-
-                return vec4f(vec3f(gray), 1.0);
-            }
-
-            let visibility = shadowVisibility(worldPosition);
-
-            return vec4f(
-                marbleColor.rgb * visibility,
-                marbleColor.a
-            );
-        }
+        return vec4f(ambient + visibility * direct, marble.a);
+      }
     </script>
-
     <script id="teapot-wgsl" type="x-shader">
-        struct Uniforms {
-            mvp: mat4x4f,
-            model: mat4x4f,
-            lightPosition: vec4f,
-            lightVP: mat4x4f,
-        };
+      struct Uniforms {
+        model: mat4x4f,
+        mvp: mat4x4f,
+        light: vec4f,
+      };
 
-        @group(0) @binding(0)
-        var<uniform> uniforms: Uniforms;
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-        @group(0) @binding(1)
-        var lightDepthMap: texture_2d<f32>;
+      struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) worldPos: vec3f,
+        @location(1) normal: vec3f,
+      };
 
-        struct VSOut {
-            @builtin(position) position: vec4f,
-            @location(0) worldPosition: vec3f,
-            @location(1) normal: vec3f,
-        };
+      @vertex
+      fn teapot_vs(
+        @location(0) inPos: vec4f,
+        @location(1) inNormal: vec4f
+      ) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.position = uniforms.mvp * inPos;
+        vsOut.worldPos = (uniforms.model * inPos).xyz;
+        vsOut.normal = inNormal.xyz;
+        return vsOut;
+      }
 
-        @vertex
-        fn main_vs(
-            @location(0) position: vec4f,
-            @location(1) normal: vec4f
-        ) -> VSOut {
-            var output: VSOut;
+      @fragment
+      fn teapot_fs(
+        @location(0) worldPos: vec3f,
+        @location(1) interpolatedNormal: vec3f
+      ) -> @location(0) vec4f {
+        let n = normalize(interpolatedNormal);
+        let towardLight = normalize(uniforms.light.xyz - worldPos);
+        let towardEye = normalize(-worldPos);
 
-            let world = uniforms.model * position;
+        let kd = vec3f(0.72);
+        let cosTheta = max(dot(n, towardLight), 0.0);
+        let ambient = 0.2 * kd;
+        let diffuse = 0.8 * kd * cosTheta;
 
-            output.position = uniforms.mvp * position;
-            output.worldPosition = world.xyz;
-
-            output.normal = normalize(
-                (uniforms.model *
-                 vec4f(normal.xyz, 0.0)).xyz
-            );
-
-            return output;
+        var specular = vec3f(0.0);
+        if (cosTheta > 0.0) {
+          let reflected = reflect(-towardLight, n);
+          let cosPhi = max(dot(reflected, towardEye), 0.0);
+          specular = vec3f(0.3 * pow(cosPhi, 32.0));
         }
 
-        // Skyggeberegning på tepotten
-        fn shadowVisibility(worldPosition: vec3f) -> f32 {
-            let clip = uniforms.lightVP * vec4f(
-                worldPosition, 1.0
-            );
-
-            if (clip.w <= 0.0) {
-                return 1.0;
-            }
-
-            let ndc = clip.xyz / clip.w;
-
-            let uv = vec2f(
-                ndc.x * 0.5 + 0.5,
-                0.5 - ndc.y * 0.5
-            );
-
-            if (uv.x < 0.0 || uv.x >= 1.0 ||
-                uv.y < 0.0 || uv.y >= 1.0 ||
-                ndc.z < 0.0 || ndc.z > 1.0) {
-                return 1.0;
-            }
-
-            let dimensions = vec2i(
-                textureDimensions(lightDepthMap)
-            );
-
-            let pixel = clamp(
-                vec2i(uv * vec2f(dimensions)),
-                vec2i(0),
-                dimensions - vec2i(1)
-            );
-
-            let storedDepth = textureLoad(
-                lightDepthMap,
-                pixel,
-                0
-            ).r;
-
-            let bias = 0.004;
-
-            if (ndc.z > storedDepth + bias) {
-                return 0.45;
-            }
-
-            return 1.0;
-        }
-
-        @fragment
-        fn main_fs(input: VSOut) -> @location(0) vec4f {
-            let N = normalize(input.normal);
-
-            let L = normalize(
-                uniforms.lightPosition.xyz -
-                input.worldPosition
-            );
-
-            let V = normalize(-input.worldPosition);
-            let H = normalize(L + V);
-
-            let diffuse = max(dot(N, L), 0.0);
-            let specular = pow(
-                max(dot(N, H), 0.0),
-                32.0
-            );
-
-            let visibility = shadowVisibility(
-                input.worldPosition
-            );
-
-            let materialColor = vec3f(0.56, 0.58, 0.62);
-            let ambient = 0.40;
-
-            let rgb =
-                materialColor *
-                (ambient + 0.70 * diffuse * visibility)
-                + vec3f(0.30, 0.30, 0.30)
-                * specular * visibility;
-
-            return vec4f(rgb, 1.0);
-        }
+        let visibility = lightVisibility(worldPos);
+        return vec4f(ambient + visibility * (diffuse + specular), 1.0);
+      }
     </script>
+    <script id="depth-wgsl" type="x-shader">
+      struct DepthUniforms {
+        lightMvp: mat4x4f,
+      };
 
-    <script id="light-wgsl" type="x-shader">
-        struct LightUniforms {
-            lightMVP: mat4x4f,
-        };
+      @group(0) @binding(0) var<uniform> depthUniforms: DepthUniforms;
 
-        @group(0) @binding(0)
-        var<uniform> uniforms: LightUniforms;
+      @vertex
+      fn ground_depth_vs(@location(0) pos: vec3f) -> @builtin(position) vec4f {
+        return depthUniforms.lightMvp * vec4f(pos, 1.0);
+      }
 
-        @vertex
-        fn ground_vs(
-            @location(0) position: vec3f
-        ) -> @builtin(position) vec4f {
-            return uniforms.lightMVP *
-                vec4f(position, 1.0);
-        }
+      @vertex
+      fn teapot_depth_vs(@location(0) pos: vec4f) -> @builtin(position) vec4f {
+        return depthUniforms.lightMvp * pos;
+      }
 
-        @vertex
-        fn teapot_vs(
-            @location(0) position: vec4f
-        ) -> @builtin(position) vec4f {
-            return uniforms.lightMVP * position;
-        }
-
-        @fragment
-        fn depth_fs(
-            @builtin(position) pixel: vec4f
-        ) -> @location(0) vec4f {
-            return vec4f(
-                pixel.z,
-                pixel.z,
-                pixel.z,
-                1.0
-            );
-        }
+      @fragment
+      fn depth_fs(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
+        return vec4f(vec3f(fragCoord.z), 1.0);
+      }
     </script>
+    <script id="shadow-common-wgsl" type="x-shader">
+      struct ShadowSettings {
+        lightViewProjection: mat4x4f,
+        showMap: u32,
+      };
 
-    <script src="myscript.js"></script>
-</head>
+      @group(1) @binding(0) var<uniform> shadowSettings: ShadowSettings;
+      @group(1) @binding(1) var shadowMap: texture_2d<f32>;
 
-<body>
-    <h2>Worksheet 9 - Part 4</h2>
+      fn readShadowDepth(uv: vec2f) -> f32 {
+        let size = vec2i(textureDimensions(shadowMap));
+        let pixel = clamp(vec2i(uv * vec2f(size)), vec2i(0), size - vec2i(1));
+        return textureLoad(shadowMap, pixel, 0).r;
+      }
 
+      fn lightVisibility(worldPos: vec3f) -> f32 {
+        let clip = shadowSettings.lightViewProjection * vec4f(worldPos, 1.0);
+
+        if (clip.w <= 0.0) {
+          return 1.0;
+        }
+
+        let ndc = clip.xyz / clip.w;
+        let uv = vec2f(0.5 * ndc.x + 0.5, 0.5 - 0.5 * ndc.y);
+
+        if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)) ||
+            ndc.z < 0.0 || ndc.z > 1.0) {
+          return 1.0;
+        }
+
+        let texelSize = 1.0 / vec2f(textureDimensions(shadowMap));
+        let bias = 0.001;
+        var litSamples = 0.0;
+
+        for (var y = 0; y < 4; y++) {
+          for (var x = 0; x < 4; x++) {
+            let offset = vec2f(f32(x) - 1.5, f32(y) - 1.5);
+            let sampleUV = uv + offset * texelSize;
+            let nearestDepth = readShadowDepth(sampleUV);
+
+            litSamples += select(1.0, 0.0, nearestDepth < ndc.z - bias);
+          }
+        }
+
+        return litSamples / 16.0;
+      }
+    </script>
+    <script type="text/javascript" src="myscript.js"></script>
+  </head>
+  <body>
+    <nav>
+      <a href="../part-02-03/index.html">Forrige part</a> |
+      <a href="../index.html">Worksheet 9</a> |
+    </nav>
+    <h1>Worksheet 9 - Part 4</h1>
+    <h2>hovedansvarlig: Philip[s245218]</h2>
     <canvas id="my-canvas" width="512" height="512">
-        Please use a browser that supports HTML5 canvas.
+      Please use a browser that supports HTML5 canvas.
     </canvas>
-
     <div>
-        <button id="toggleTeapot">Pause teapot</button>
-        <button id="toggleLight">Pause lys</button>
-        <button id="toggleShadowMap">Vis shadow map</button>
+      <button id="lightButton" type="button">Stop lysrotation</button>
+      <button id="teapotButton" type="button">Stop tekandens bevægelse</button>
     </div>
-
-    <p id="status" role="alert"></p>
-</body>
+    <label>
+      <input type="checkbox" id="showShadowMap">
+      Vis dybdekort på gulvet
+    </label>
+  </body>
 </html>

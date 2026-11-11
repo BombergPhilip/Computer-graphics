@@ -1,9 +1,0 @@
-Nearest filtering vælger den nærmeste texel og giver et skarpt, men mere pixelagtigt resultat. Linear filtering interpolerer mellem flere texels og giver derfor et glattere resultat.
-
-Ved magnification bliver teksturen forstørret. Her giver nearest tydelige pixels, mens linear giver et blødere resultat.
-
-Ved minification bliver mange texels presset sammen til få pixels. Det kan give aliasing og flimren. Mipmapping reducerer dette ved at bruge mindre versioner af teksturen, når objektet er langt væk. Mipmap filtering bestemmer, hvordan der vælges eller interpoleres mellem mipmap-niveauerne.
-
-I `genmipmap.js` genereres hvert mindre mipmap-niveau ud fra det foregående niveau ved hjælp af linear filtering.
-
-Repeat gentager teksturen, når texture coordinates ligger uden for intervallet 0 til 1, mens clamp-to-edge bruger farven fra teksturens yderste kant.

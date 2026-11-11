@@ -104,7 +104,6 @@ async function main() {
   });
 
   function render(time) {
-    // time er i millisekunder. En hel omgang tager 10 sekunder.
     theta[0] = (time / 10000) * 2 * Math.PI;
     device.queue.writeBuffer(uniformBuffer, 0, theta);
 

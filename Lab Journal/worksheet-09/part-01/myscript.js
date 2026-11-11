@@ -1,412 +1,356 @@
-
 "use strict";
-
 window.onload = function () {
-    main().catch(function (error) {
-        console.error(error);
-        document.getElementById("status").textContent = error.message;
-    });
+  main();
 };
 
+function shadowProjection(light, groundY) {
+  const [lx, ly, lz] = light;
+  const h = ly - groundY;
+
+  return mat4(
+    h, -lx,        0, lx * groundY,
+    0, -groundY,   0, ly * groundY,
+    0, -lz,        h, lz * groundY,
+    0, -1,         0, ly,
+  );
+}
+
 async function main() {
-    if (!navigator.gpu) {
-        throw new Error("WebGPU virker ikke i denne browser.");
+  const gpu = navigator.gpu;
+  const adapter = await gpu.requestAdapter();
+  const device = await adapter.requestDevice();
+  const canvas = document.getElementById("my-canvas");
+  const context = canvas.getContext("webgpu");
+  const canvasFormat = gpu.getPreferredCanvasFormat();
+
+  context.configure({
+    device: device,
+    format: canvasFormat,
+  });
+
+  const positions = [
+    vec3(-2, -1, -1),
+    vec3( 2, -1, -1),
+    vec3( 2, -1, -5),
+    vec3(-2, -1, -5),
+
+    vec3(0.25, -0.5, -1.25),
+    vec3(0.75, -0.5, -1.25),
+    vec3(0.75, -0.5, -1.75),
+    vec3(0.25, -0.5, -1.75),
+
+    vec3(-1, -1, -2.5),
+    vec3(-1, -1, -3.0),
+    vec3(-1,  0, -3.0),
+    vec3(-1,  0, -2.5),
+  ];
+
+  const texCoords = [
+    vec2(0, 0), vec2(1, 0), vec2(1, 1), vec2(0, 1),
+    vec2(0, 0), vec2(1, 0), vec2(1, 1), vec2(0, 1),
+    vec2(0, 0), vec2(1, 0), vec2(1, 1), vec2(0, 1),
+  ];
+
+  const indices = new Uint32Array([0, 1, 2, 0, 2, 3]);
+
+  const positionData = flatten(positions);
+  const positionBuffer = device.createBuffer({
+    size: positionData.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(positionBuffer, 0, positionData);
+
+  const texCoordData = flatten(texCoords);
+  const texCoordBuffer = device.createBuffer({
+    size: texCoordData.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(texCoordBuffer, 0, texCoordData);
+
+  const indexBuffer = device.createBuffer({
+    size: indices.byteLength,
+    usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(indexBuffer, 0, indices);
+
+  const positionBufferLayout = {
+    arrayStride: sizeof["vec3"],
+    attributes: [
+      { format: "float32x3", offset: 0, shaderLocation: 0 },
+    ],
+  };
+
+  const texCoordBufferLayout = {
+    arrayStride: sizeof["vec2"],
+    attributes: [
+      { format: "float32x2", offset: 0, shaderLocation: 1 },
+    ],
+  };
+
+  const response = await fetch("../../resources/xamp23.png");
+  if (!response.ok) {
+    throw new Error(`Kunne ikke hente xamp23.png: HTTP ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const img = await createImageBitmap(blob, {
+    colorSpaceConversion: "none",
+  });
+
+  const groundTexture = device.createTexture({
+    size: [img.width, img.height, 1],
+    format: "rgba8unorm",
+    usage:
+      GPUTextureUsage.COPY_DST |
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+
+  device.queue.copyExternalImageToTexture(
+    { source: img, flipY: true },
+    { texture: groundTexture },
+    { width: img.width, height: img.height },
+  );
+
+  img.close();
+
+  const teapot = await readOBJFile("../../resources/teapot.obj", 1.0, true);
+
+  if (!teapot) {
+    throw new Error("Kunne ikke indlæse ../../resources/teapot.obj");
+  }
+
+  function createModelBuffer(data, usage) {
+    const buffer = device.createBuffer({
+      size: data.byteLength,
+      usage: usage | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(buffer, 0, data);
+    return buffer;
+  }
+
+  const teapotPositionBuffer = createModelBuffer(
+    teapot.vertices, GPUBufferUsage.VERTEX,
+  );
+  const teapotNormalBuffer = createModelBuffer(
+    teapot.normals, GPUBufferUsage.VERTEX,
+  );
+  const teapotIndexBuffer = createModelBuffer(
+    teapot.indices, GPUBufferUsage.INDEX,
+  );
+
+  const mySampler = device.createSampler({
+    minFilter: "linear",
+    magFilter: "linear",
+  });
+
+  const wgsl = device.createShaderModule({
+    code: document.getElementById("wgsl").text,
+  });
+  const teapotWgsl = device.createShaderModule({
+    code: document.getElementById("teapot-wgsl").text,
+  });
+
+  const depthFormat = "depth24plus";
+
+  const teapotPositionLayout = {
+    arrayStride: sizeof["vec4"],
+    attributes: [
+      { format: "float32x4", offset: 0, shaderLocation: 0 },
+    ],
+  };
+
+  const teapotNormalLayout = {
+    arrayStride: sizeof["vec4"],
+    attributes: [
+      { format: "float32x4", offset: 0, shaderLocation: 1 },
+    ],
+  };
+
+  function createPipeline(module, vertexEntry, fragmentEntry, buffers) {
+    return device.createRenderPipeline({
+      layout: "auto",
+      vertex: {
+        module: module,
+        entryPoint: vertexEntry,
+        buffers: buffers,
+      },
+      fragment: {
+        module: module,
+        entryPoint: fragmentEntry,
+        targets: [{ format: canvasFormat }],
+      },
+      primitive: {
+        topology: "triangle-list",
+      },
+      depthStencil: {
+        format: depthFormat,
+        depthWriteEnabled: true,
+        depthCompare: "less",
+      },
+    });
+  }
+
+  const pipeline = createPipeline(
+    wgsl,
+    "main_vs",
+    "main_fs",
+    [positionBufferLayout, texCoordBufferLayout],
+  );
+
+  const teapotPipeline = createPipeline(
+    teapotWgsl,
+    "teapot_vs",
+    "teapot_fs",
+    [teapotPositionLayout, teapotNormalLayout],
+  );
+
+  const view = mat4();
+  const projection = perspective(90, canvas.width / canvas.height, 0.1, 100);
+
+  const M_st = mat4(
+    1, 0,   0,   0,
+    0, 1,   0,   0,
+    0, 0, 0.5, 0.5,
+    0, 0,   0,   1,
+  );
+
+  const mvp = mult(M_st, mult(projection, view));
+
+  const matrixSize = sizeof["mat4"];
+
+  const uniformBuffer = device.createBuffer({
+    size: matrixSize + 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(uniformBuffer, 0, flatten(mvp));
+  device.queue.writeBuffer(uniformBuffer, matrixSize, new Float32Array([1.0]));
+
+  const groundBindGroup = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: { buffer: uniformBuffer } },
+      { binding: 1, resource: mySampler },
+      { binding: 2, resource: groundTexture.createView() },
+    ],
+  });
+
+  const teapotScale = scalem(0.25, 0.25, 0.25);
+
+  const teapotUniformBuffer = device.createBuffer({
+    size: 2 * matrixSize + sizeof["vec4"],
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+
+  const teapotBindGroup = device.createBindGroup({
+    layout: teapotPipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: { buffer: teapotUniformBuffer } },
+    ],
+  });
+
+  const lightButton = document.getElementById("lightButton");
+  const teapotButton = document.getElementById("teapotButton");
+
+  let lightMoving = true;
+  let teapotMoving = true;
+
+  let lightAngle = 0;
+  let jumpAngle = 0;
+  let previousTime = null;
+
+  const depthTexture = device.createTexture({
+    size: [canvas.width, canvas.height],
+    format: depthFormat,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+
+  function render() {
+    const light = vec4(
+      2 * Math.cos(lightAngle),
+      2,
+      -2 + 2 * Math.sin(lightAngle),
+      1,
+    );
+
+    const teapotY = -1 + 0.75 * (1 - Math.cos(jumpAngle));
+
+    const model = mult(
+      translate(0, teapotY, -3),
+      teapotScale,
+    );
+
+    const teapotMvp = mult(mvp, model);
+
+    device.queue.writeBuffer(teapotUniformBuffer, 0, flatten(model));
+    device.queue.writeBuffer(teapotUniformBuffer, matrixSize, flatten(teapotMvp));
+    device.queue.writeBuffer(teapotUniformBuffer, 2 * matrixSize, flatten(light));
+
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: context.getCurrentTexture().createView(),
+          loadOp: "clear",
+          storeOp: "store",
+          clearValue: { r: 0.3921, g: 0.5843, b: 0.9294, a: 1.0 },
+        },
+      ],
+      depthStencilAttachment: {
+        view: depthTexture.createView(),
+        depthLoadOp: "clear",
+        depthClearValue: 1.0,
+        depthStoreOp: "store",
+      },
+    });
+
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, groundBindGroup);
+    pass.setVertexBuffer(0, positionBuffer);
+    pass.setVertexBuffer(1, texCoordBuffer);
+    pass.setIndexBuffer(indexBuffer, "uint32");
+    pass.drawIndexed(indices.length);
+
+    pass.setPipeline(teapotPipeline);
+    pass.setBindGroup(0, teapotBindGroup);
+    pass.setVertexBuffer(0, teapotPositionBuffer);
+    pass.setVertexBuffer(1, teapotNormalBuffer);
+    pass.setIndexBuffer(teapotIndexBuffer, "uint32");
+    pass.drawIndexed(teapot.indices.length);
+
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+  }
+
+  function animate(time) {
+    const deltaTime = previousTime === null ? 0 : (time - previousTime) / 1000;
+    previousTime = time;
+
+    if (lightMoving) {
+      lightAngle += 0.6 * deltaTime;
     }
 
-    const gpu = navigator.gpu;
-    const adapter = await gpu.requestAdapter();
-
-    if (!adapter) {
-        throw new Error("Kunne ikke finde en WebGPU-adapter.");
+    if (teapotMoving) {
+      jumpAngle += 2.0 * deltaTime;
     }
 
-    const device = await adapter.requestDevice();
-
-    const canvas = document.getElementById("my-canvas");
-    const context = canvas.getContext("webgpu");
-    const canvasFormat = gpu.getPreferredCanvasFormat();
-
-    context.configure({
-        device: device,
-        format: canvasFormat,
-        alphaMode: "opaque",
-    });
-
-    function createBuffer(data, usage) {
-        const buffer = device.createBuffer({
-            size: data.byteLength,
-            usage: usage | GPUBufferUsage.COPY_DST,
-        });
-
-        device.queue.writeBuffer(buffer, 0, data);
-        return buffer;
-    }
-
-    const projection = perspective(
-        90,
-        canvas.width / canvas.height,
-        0.1,
-        100
-    );
-
-    const M_st = mat4(
-        1, 0, 0,   0,
-        0, 1, 0,   0,
-        0, 0, 0.5, 0.5,
-        0, 0, 0,   1
-    );
-
-    const projectionMatrix = mult(M_st, projection);
-
-    const groundPositions = new Float32Array([
-        -2.0, -1.0, -1.0,
-         2.0, -1.0, -1.0,
-         2.0, -1.0, -5.0,
-
-        -2.0, -1.0, -1.0,
-         2.0, -1.0, -5.0,
-        -2.0, -1.0, -5.0,
-    ]);
-
-    const groundUVs = new Float32Array([
-        0, 0,
-        1, 0,
-        1, 1,
-
-        0, 0,
-        1, 1,
-        0, 1,
-    ]);
-
-    const groundPositionBuffer = createBuffer(
-        groundPositions,
-        GPUBufferUsage.VERTEX
-    );
-
-    const groundUVBuffer = createBuffer(
-        groundUVs,
-        GPUBufferUsage.VERTEX
-    );
-
-    const groundUniformBuffer = createBuffer(
-        flatten(projectionMatrix),
-        GPUBufferUsage.UNIFORM
-    );
-
-    const response = await fetch(
-        "../../resources/textures/yes.png"
-    );
-
-    if (!response.ok) {
-        throw new Error("Kunne ikke indlæse yes.png");
-    }
-
-    const image = await createImageBitmap(
-        await response.blob()
-    );
-
-    const marbleTexture = device.createTexture({
-        size: [image.width, image.height],
-        format: "rgba8unorm",
-        usage:
-            GPUTextureUsage.TEXTURE_BINDING |
-            GPUTextureUsage.COPY_DST |
-            GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-
-    device.queue.copyExternalImageToTexture(
-        { source: image },
-        { texture: marbleTexture },
-        { width: image.width, height: image.height }
-    );
-
-    const groundSampler = device.createSampler({
-        addressModeU: "clamp-to-edge",
-        addressModeV: "clamp-to-edge",
-        minFilter: "linear",
-        magFilter: "linear",
-    });
-
-    const groundShader = device.createShaderModule({
-        code: document.getElementById("ground-wgsl").text,
-    });
-
-    const groundPipeline = device.createRenderPipeline({
-        layout: "auto",
-
-        vertex: {
-            module: groundShader,
-            entryPoint: "main_vs",
-            buffers: [
-                {
-                    arrayStride: sizeof["vec3"],
-                    attributes: [{
-                        shaderLocation: 0,
-                        offset: 0,
-                        format: "float32x3",
-                    }],
-                },
-                {
-                    arrayStride: sizeof["vec2"],
-                    attributes: [{
-                        shaderLocation: 1,
-                        offset: 0,
-                        format: "float32x2",
-                    }],
-                },
-            ],
-        },
-
-        fragment: {
-            module: groundShader,
-            entryPoint: "main_fs",
-            targets: [{ format: canvasFormat }],
-        },
-
-        primitive: {
-            topology: "triangle-list",
-            cullMode: "none",
-        },
-
-        depthStencil: {
-            format: "depth24plus",
-            depthWriteEnabled: true,
-            depthCompare: "less",
-        },
-    });
-
-    const groundBindGroup = device.createBindGroup({
-        layout: groundPipeline.getBindGroupLayout(0),
-        entries: [
-            {
-                binding: 0,
-                resource: { buffer: groundUniformBuffer },
-            },
-            {
-                binding: 1,
-                resource: marbleTexture.createView(),
-            },
-            {
-                binding: 2,
-                resource: groundSampler,
-            },
-        ],
-    });
-
-    const obj = await readOBJFile(
-        "../../resources/teapot.obj",
-        1.0,
-        false
-    );
-
-    if (
-        !obj ||
-        !obj.vertices ||
-        !obj.normals ||
-        !obj.indices ||
-        obj.indices.length === 0
-    ) {
-        throw new Error("Kunne ikke indlæse teapot.obj");
-    }
-
-    const teapotPositionBuffer = createBuffer(
-        obj.vertices,
-        GPUBufferUsage.VERTEX
-    );
-
-    const teapotNormalBuffer = createBuffer(
-        obj.normals,
-        GPUBufferUsage.VERTEX
-    );
-
-    const teapotIndexBuffer = createBuffer(
-        obj.indices,
-        GPUBufferUsage.INDEX
-    );
-
-    const teapotUniformBuffer = device.createBuffer({
-        size:
-            2 * sizeof["mat4"] + sizeof["vec4"],
-        usage:
-            GPUBufferUsage.UNIFORM |
-            GPUBufferUsage.COPY_DST,
-    });
-
-    const teapotShader = device.createShaderModule({
-        code: document.getElementById("teapot-wgsl").text,
-    });
-
-    const teapotPipeline = device.createRenderPipeline({
-        layout: "auto",
-
-        vertex: {
-            module: teapotShader,
-            entryPoint: "main_vs",
-            buffers: [
-                {
-                    arrayStride: sizeof["vec4"],
-                    attributes: [{
-                        shaderLocation: 0,
-                        offset: 0,
-                        format: "float32x4",
-                    }],
-                },
-                {
-                    arrayStride: sizeof["vec4"],
-                    attributes: [{
-                        shaderLocation: 1,
-                        offset: 0,
-                        format: "float32x4",
-                    }],
-                },
-            ],
-        },
-
-        fragment: {
-            module: teapotShader,
-            entryPoint: "main_fs",
-            targets: [{ format: canvasFormat }],
-        },
-
-        primitive: {
-            topology: "triangle-list",
-            cullMode: "none",
-        },
-
-        depthStencil: {
-            format: "depth24plus",
-            depthWriteEnabled: true,
-            depthCompare: "less",
-        },
-    });
-
-    const teapotBindGroup = device.createBindGroup({
-        layout: teapotPipeline.getBindGroupLayout(0),
-        entries: [
-            {
-                binding: 0,
-                resource: { buffer: teapotUniformBuffer },
-            },
-        ],
-    });
-
-    const depthTexture = device.createTexture({
-        size: [canvas.width, canvas.height],
-        format: "depth24plus",
-        usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-
-    let animateTeapot = true;
-    let animateLight = true;
-
-    let bouncePhase = 0;
-    let lightPhase = 0;
-    let previousTime = null;
-
-    const teapotButton = document.getElementById("toggleTeapot");
-    const lightButton = document.getElementById("toggleLight");
-
-    teapotButton.addEventListener("click", function () {
-        animateTeapot = !animateTeapot;
-
-        teapotButton.textContent = animateTeapot
-            ? "Pause teapot"
-            : "Start teapot";
-    });
-
-    lightButton.addEventListener("click", function () {
-        animateLight = !animateLight;
-
-        lightButton.textContent = animateLight
-            ? "Pause lys"
-            : "Start lys";
-    });
-
-    const teapotUniformData = new Float32Array(36);
-
-    function render(time) {
-        const dt = previousTime === null
-            ? 0
-            : Math.min((time - previousTime) / 1000, 0.1);
-
-        previousTime = time;
-
-        if (animateTeapot) {
-            bouncePhase += dt * 2.0;
-        }
-
-        if (animateLight) {
-            lightPhase += dt * 0.8;
-        }
-
-        const y = -1 + 0.75 * (1 - Math.cos(bouncePhase));
-
-        const model = mult(
-            translate(0, y, -3),
-            scalem(0.25, 0.25, 0.25)
-        );
-
-        const mvp = mult(projectionMatrix, model);
-
-        const light = [
-            2.0 * Math.sin(lightPhase),
-            2.0,
-            -2.0 + 2.0 * Math.cos(lightPhase),
-            1.0,
-        ];
-
-        teapotUniformData.set(flatten(mvp), 0);
-        teapotUniformData.set(flatten(model), 16);
-        teapotUniformData.set(light, 32);
-
-        device.queue.writeBuffer(
-            teapotUniformBuffer,
-            0,
-            teapotUniformData
-        );
-
-        const encoder = device.createCommandEncoder();
-
-        const pass = encoder.beginRenderPass({
-            colorAttachments: [{
-                view: context.getCurrentTexture().createView(),
-                clearValue: {
-                    r: 0.3921,
-                    g: 0.5843,
-                    b: 0.9294,
-                    a: 1.0,
-                },
-                loadOp: "clear",
-                storeOp: "store",
-            }],
-
-            depthStencilAttachment: {
-                view: depthTexture.createView(),
-                depthClearValue: 1.0,
-                depthLoadOp: "clear",
-                depthStoreOp: "store",
-            },
-        });
-
-        pass.setPipeline(groundPipeline);
-        pass.setVertexBuffer(0, groundPositionBuffer);
-        pass.setVertexBuffer(1, groundUVBuffer);
-        pass.setBindGroup(0, groundBindGroup);
-        pass.draw(6);
-
-        pass.setPipeline(teapotPipeline);
-        pass.setVertexBuffer(0, teapotPositionBuffer);
-        pass.setVertexBuffer(1, teapotNormalBuffer);
-        pass.setIndexBuffer(teapotIndexBuffer, "uint32");
-        pass.setBindGroup(0, teapotBindGroup);
-        pass.drawIndexed(obj.indices.length);
-
-        pass.end();
-
-        device.queue.submit([encoder.finish()]);
-
-        requestAnimationFrame(render);
-    }
-
-    requestAnimationFrame(render);
+    render();
+    requestAnimationFrame(animate);
+  }
+
+  lightButton.addEventListener("click", function () {
+    lightMoving = !lightMoving;
+    lightButton.textContent = lightMoving
+      ? "Stop lysrotation"
+      : "Start lysrotation";
+  });
+
+  teapotButton.addEventListener("click", function () {
+    teapotMoving = !teapotMoving;
+    teapotButton.textContent = teapotMoving
+      ? "Stop tekandens bevægelse"
+      : "Start tekandens bevægelse";
+  });
+
+  requestAnimationFrame(animate);
 }
