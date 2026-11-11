@@ -1,0 +1,61 @@
+
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worksheet 5 - Part 3</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        canvas {
+            display: block;
+            max-width: 100%;
+        }
+
+        #status {
+            color: #a00000;
+        }
+    </style>
+
+    <script src="../../resources/MV.js"></script>
+    <script src="../../resources/OBJParser.js"></script>
+
+    <script id="shader-wgsl" type="x-shader">
+        struct Uniforms {
+            mvp: mat4x4f,
+        };
+
+        @group(0) @binding(0)
+        var<uniform> uniforms: Uniforms;
+
+        @vertex
+        fn main_vs(
+            @location(0) position: vec4f
+        ) -> @builtin(position) vec4f {
+            return uniforms.mvp * position;
+        }
+
+        @fragment
+        fn main_fs() -> @location(0) vec4f {
+            return vec4f(0.8, 0.3, 0.2, 1.0);
+        }
+    </script>
+
+    <script src="myscript.js"></script>
+</head>
+
+<body>
+    <h2>Worksheet 5 - Part 3</h2>
+
+    <canvas id="my-canvas" width="512" height="512">
+        Please use a browser that supports HTML5 canvas.
+    </canvas>
+
+    <p id="status" role="alert"></p>
+</body>
+</html>
