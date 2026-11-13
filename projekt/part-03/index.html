@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <title>Planar Reflector - Part 3</title>
+
+  <script src="../../Lab Journal/resources/MV.js"></script>
+  <script src="../../Lab Journal/resources/OBJParser.js"></script>
+
+  <script id="teapot-wgsl" type="x-shader">
+    struct Uniforms {
+      model: mat4x4f,
+      mvp: mat4x4f,
+      light: vec4f,
+      eye: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    struct VSOut {
+      @builtin(position) position: vec4f,
+      @location(0) worldPos: vec3f,
+      @location(1) normal: vec3f,
+    };
+
+    @vertex
+    fn teapot_vs(
+      @location(0) inPos: vec4f,
+      @location(1) inNormal: vec4f
+    ) -> VSOut {
+      var output: VSOut;
+
+      output.position = uniforms.mvp * inPos;
+      output.worldPos = (uniforms.model * inPos).xyz;
+      output.normal = normalize(
+        (uniforms.model * vec4f(inNormal.xyz, 0.0)).xyz
+      );
+
+      return output;
+    }
+
+    @fragment
+    fn teapot_fs(
+      @location(0) worldPos: vec3f,
+      @location(1) normal: vec3f
+    ) -> @location(0) vec4f {
+      let n = normalize(normal);
+      let l = normalize(uniforms.light.xyz - worldPos);
+      let v = normalize(uniforms.eye.xyz - worldPos);
+
+      let kd = vec3f(0.72);
+
+      let diffuse = 0.8 * kd * max(dot(n, l), 0.0);
+      let reflected = reflect(-l, n);
+      let specular = 0.3 * pow(max(dot(reflected, v), 0.0), 32.0);
+
+      return vec4f(0.4 * kd + diffuse + vec3f(specular), 1.0);
+    }
+  </script>
+
+  <script id="ground-wgsl" type="x-shader">
+    struct GroundUniforms {
+      mvp: mat4x4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: GroundUniforms;
+    @group(0) @binding(1) var groundSampler: sampler;
+    @group(0) @binding(2) var groundTexture: texture_2d<f32>;
+
+    struct VSOut {
+      @builtin(position) position: vec4f,
+      @location(0) uv: vec2f,
+    };
+
+    @vertex
+    fn ground_vs(
+      @location(0) position: vec3f,
+      @location(1) texCoords: vec2f
+    ) -> VSOut {
+      var output: VSOut;
+
+      output.position = uniforms.mvp * vec4f(position, 1.0);
+      output.uv = texCoords;
+
+      return output;
+    }
+
+    @fragment
+    fn ground_fs(@location(0) uv: vec2f) -> @location(0) vec4f {
+      let color = textureSample(groundTexture, groundSampler, uv);
+      return vec4f(color.rgb, 0.55);
+    }
+  </script>
+
+  <script id="stencil-wgsl" type="x-shader">
+    struct StencilUniforms {
+      mvp: mat4x4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: StencilUniforms;
+
+    @vertex
+    fn stencil_vs(
+      @location(0) position: vec3f
+    ) -> @builtin(position) vec4f {
+      return uniforms.mvp * vec4f(position, 1.0);
+    }
+
+    @fragment
+    fn stencil_fs() -> @location(0) vec4f {
+      return vec4f(0.0);
+    }
+  </script>
+
+  <script src="myscript.js"></script>
+</head>
+
+<body>
+  <h1>Planar Reflector - Part 3</h1>
+
+  <canvas id="my-canvas" width="512" height="512"></canvas>
+
+  <div>
+    <button id="lightButton">Stop lysrotation</button>
+    <button id="teapotButton">Stop tekandens bevægelse</button>
+  </div>
+
+  <p id="status"></p>
+</body>
+</html>
