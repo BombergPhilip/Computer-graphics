@@ -280,7 +280,7 @@ async function main() {
 
     depthStencil: {
       format: depthFormat,
-      depthWriteEnabled: false,
+      depthWriteEnabled: true,
       depthCompare: "less",
     },
   });
